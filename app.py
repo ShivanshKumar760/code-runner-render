@@ -3,6 +3,9 @@ import resource
 import shutil
 import subprocess
 import tempfile
+import threading
+
+
 
 from flask import Flask, request, jsonify, render_template
 
@@ -32,6 +35,10 @@ MEMORY_LIMIT_BYTES = 100 * 1024 * 1024  # 100 MB address space
 MAX_OUTPUT_BYTES = 1 * 1024 * 1024     # 1 MB stdout/stderr cap
 MAX_PROCESSES = 10                     # blocks basic fork bombs
 
+MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT", "2"))   # tune per machine
+slots = threading.BoundedSemaphore(MAX_CONCURRENT)
+MAX_PROCESSES = 64   # was 10. NPROC counts ALL processes+threads of this Linux user
+
 
 def apply_limits():
     """Runs in the child process (after fork, before exec) to cap what the
@@ -59,6 +66,11 @@ def execute():
 
     if not code or not isinstance(code, str):
         return jsonify(error="Missing 'code' (string)"), 400
+    if not slots.acquire(blocking=False):
+        resp = jsonify(error="Server busy ,retry shortly")
+        resp.status_code = 503
+        resp.headers["Retry-After"] = "2"
+        return resp
 
     tmp_dir = tempfile.mkdtemp(prefix="run_")
     script_path = os.path.join(tmp_dir, "script.py")
