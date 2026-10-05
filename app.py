@@ -13,6 +13,7 @@ from flask import Flask, request, jsonify, render_template
 
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024   # reject request bodies over 100 KB
 
 # ---------------------------------------------------------------------------
 # IMPORTANT: Render does not allow a running service to spawn its own Docker
